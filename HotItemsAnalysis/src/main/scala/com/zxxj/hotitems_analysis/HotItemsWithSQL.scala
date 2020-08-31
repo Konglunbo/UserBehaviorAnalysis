@@ -2,8 +2,8 @@ package com.zxxj.hotitems_analysis
 
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala._
-import org.apache.flink.table.api.{EnvironmentSettings, Slide, Table}
 import org.apache.flink.table.api.scala._
+import org.apache.flink.table.api.{EnvironmentSettings, Slide, Table}
 import org.apache.flink.types.Row
 
 /**
@@ -36,34 +36,28 @@ object HotItemsWithTableApi {
       //指定eventTime的时间戳
       .assignAscendingTimestamps(_.timestamp * 1000L)
 
-    // 将流转换成表,并提取需要的字段，定义时间属性
-    val dataTable: Table = tableEnv.fromDataStream(dataStream, 'itemId, 'behavior, 'timestamp.rowtime as 'ts)
+    // 将流直接注册成表,并提取需要的字段，定义时间属性
+    tableEnv.createTemporaryView("dataTable", dataStream, 'itemId, 'behavior, 'timestamp.rowtime as 'ts)
 
-    // 进行开窗聚合操作
-    val aggTable: Table = dataTable
-      // 过滤pv
-      .filter('behavior === "pv")
-      // 先开窗口
-      .window(Slide over 1.hours every 5.minutes on 'ts as 'sw)
-      .groupBy('itemId, 'sw)
-      .select('itemId, 'sw.end as 'windowEnd, 'itemId.count as 'cnt)
-
-
-    // 将聚合结果表注册到表环境中，通过写SQL的方式实现TOP N 的选取
-    tableEnv.createTemporaryView("agg", aggTable, 'itemId, 'cnt, 'windowEnd)
     val resultTable: Table = tableEnv.sqlQuery(
       """
         |select *
         |from (
         |    select *, row_number() over (partition by windowEnd order by cnt desc) as row_num
-        |    from agg
+        |    from
+        |      (
+        |         select itemId, hop_end(ts, interval '5' minute , interval '1' hour) as windowEnd , count(itemId) as cnt
+        |         from dataTable
+        |         where behavior = 'pv'
+        |         group by itemId , hop(ts,interval '5' minute , interval '1' hour )
+        |      )
         |)
         |where row_num <=5
         |
         |""".stripMargin)
 
     resultTable.toRetractStream[Row].print("result")
-    env.execute(" TOPN  TABLE API")
+    env.execute(" TOPN  FLINK-SQL")
 
 
   }

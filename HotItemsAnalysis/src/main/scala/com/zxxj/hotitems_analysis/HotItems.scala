@@ -2,7 +2,6 @@ package com.zxxj.hotitems_analysis
 
 
 import java.sql.Timestamp
-
 import java.sql.Timestamp
 import java.util.Properties
 
@@ -18,6 +17,7 @@ import org.apache.flink.streaming.api.scala.function.WindowFunction
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer
+import org.apache.flink.table.api.EnvironmentSettings
 import org.apache.flink.util.Collector
 
 import scala.collection.mutable.ListBuffer
@@ -41,6 +41,9 @@ object HotItems {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setParallelism(1)
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+
+
+
 
     //2.读取数据
     val dataStream = env.readTextFile("E:\\workspace\\workspace_scala\\UserBehaviorAnalysis\\HotItemsAnalysis\\src\\main\\resources\\UserBehavior.csv")

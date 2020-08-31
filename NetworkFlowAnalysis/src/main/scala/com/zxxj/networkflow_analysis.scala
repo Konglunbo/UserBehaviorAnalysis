@@ -9,7 +9,7 @@ import java.util.Map
 import org.apache.flink.api.common.functions.AggregateFunction
 import org.apache.flink.api.common.state.{ListState, ListStateDescriptor, MapState, MapStateDescriptor}
 import org.apache.flink.streaming.api.TimeCharacteristic
-import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment}
+import org.apache.flink.streaming.api.scala.{DataStream, OutputTag, StreamExecutionEnvironment}
 import org.apache.flink.api.scala._
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction
@@ -53,6 +53,7 @@ object networkflow_analysis {
       ApacheLogEvent(dataArray(0).trim, dataArray(1).trim, timestamp, dataArray(5).trim, dataArray(6).trim)
 
     })
+    // 此处对延迟数据的处理进行优化，对watermark的延迟时间进行减小，同时在开窗后，允许迟到数据，这样的话就可以先输出结果，在等待的时间内，来一条迟到的数据，就更新一次结果
     .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor[ApacheLogEvent](Time.seconds(1)) {
       // 由于前边对eventTime已做时间格式的转换，现在的eventTime已经是 毫秒值，因此不用再次乘以1000L
       override def extractTimestamp(element: ApacheLogEvent): Long = element.eventTime
@@ -63,6 +64,8 @@ object networkflow_analysis {
     //preAggregator: AggregateFunction[T, ACC, V],
     //      windowFunction: WindowFunction[V, R, K, W]): DataStream[R]
     // 每个窗口做预聚合之后的结果
+    .allowedLateness(Time.minutes(1))
+    .sideOutputLateData(new OutputTag[ApacheLogEvent]("late"))
     .aggregate(new CountAgg(), new WindowResult()) //自定义窗口函数
     .keyBy(_.windowEnd)
     .process(new TopNHotUrls(5))
@@ -98,23 +101,37 @@ class WindowResult() extends WindowFunction[Long, UrlViewCount, String, TimeWind
 
 // 自定义排序输出处理函数
 class TopNHotUrls(topSize: Int) extends KeyedProcessFunction[Long, UrlViewCount, String]{
+
+
+  // 改进：定义mapstate，用来保存当前窗口所有page的count值，有更新操作时，直接put
   lazy val urlState: MapState[String, Long] = getRuntimeContext.getMapState( new MapStateDescriptor[String, Long]("url-state", classOf[String], classOf[Long] ) )
 
   override def processElement(value: UrlViewCount, ctx: KeyedProcessFunction[Long, UrlViewCount, String]#Context, out: Collector[String]): Unit = {
+    // 类似upsert操作
     urlState.put(value.url, value.count)
     ctx.timerService().registerEventTimeTimer(value.windowEnd + 1)
+    // 定义1分钟后的定时器，用于清除状态
+    ctx.timerService().registerEventTimeTimer(value.windowEnd + 60 *1000L)
   }
 
   override def onTimer(timestamp: Long, ctx: KeyedProcessFunction[Long, UrlViewCount, String]#OnTimerContext, out: Collector[String]): Unit = {
+    // 判断时间戳，如果是1分钟后的定时器，直接清空状态
+    if (timestamp == ctx.getCurrentKey + 60 * 1000L){
+      urlState.clear()
+      return
+    }
+
+
     // 从状态中拿到数据
     val allUrlViews: ListBuffer[(String, Long)] = new ListBuffer[(String, Long)]()
+    // 获取到所有的键值对
     val iter = urlState.entries().iterator()
     while(iter.hasNext){
       val entry = iter.next()
       allUrlViews += (( entry.getKey, entry.getValue ))
     }
 
-       urlState.clear()
+
      val sortedUrlViews= allUrlViews.sortWith(_._2> _._2).take(topSize)
 
     // 格式化结果输出
