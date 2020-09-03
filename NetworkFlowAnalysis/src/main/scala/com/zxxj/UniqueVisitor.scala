@@ -17,7 +17,7 @@ import org.apache.flink.util.Collector
 
 //定义输入数据的样例类
 // 561558,3611281,965809,pv,1511658000
-case class UserBehavior(userId: Long, itemId: Long, categoryId: Int, behavior: String, timestamp: Long)
+//case class UserBehavior(userId: Long, itemId: Long, categoryId: Int, behavior: String, timestamp: Long)
 
 case class UvCount(windowEnd: Long, uvCount: Long)
 
