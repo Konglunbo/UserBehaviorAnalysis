@@ -46,6 +46,8 @@ object AdStatisticsByGeo {
     val dataStream: DataStream[AdClickEvent] = adEventStream
       .keyBy(data => (data.userId, data.adId))
       .process(new FilterBlackListUser(100))
+
+
     // 根据省份做分组，开窗聚合
     val adCountStream: DataStream[CountByProvince] = dataStream.keyBy(_.province)
       .timeWindow(Time.hours(1), Time.seconds(5))
@@ -64,7 +66,7 @@ object AdStatisticsByGeo {
     lazy val countState: ValueState[Long] = getRuntimeContext.getState(new ValueStateDescriptor[Long]("count-state", classOf[Long]))
     // 保存是否发送过黑名单的状态
     lazy val isSentBlackList: ValueState[Boolean] = getRuntimeContext.getState(new ValueStateDescriptor[Boolean]("issent-state", classOf[Boolean]))
-    // 保存定时器触发的时间戳
+    // 保存定时器触发的时间戳 0点清空状态的时间戳
     lazy val resetTimer: ValueState[Long] = getRuntimeContext.getState(new ValueStateDescriptor[Long]("resettime-state", classOf[Long]))
 
 
@@ -74,6 +76,7 @@ object AdStatisticsByGeo {
       val curCount: Long = countState.value()
       // 如果是第一次处理，注册定时器，每天00：00触发
       if (curCount == 0) {
+        // 第二天 0 点的时间戳
         val ts = (ctx.timerService().currentProcessingTime() / (1000 * 24 * 60 * 60) + 1) * (1000 * 60 * 60 * 24)
         //更新定时器状态
         resetTimer.update(ts)

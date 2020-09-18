@@ -5,7 +5,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.apache.flink.streaming.api.TimeCharacteristic
-import org.apache.flink.streaming.api.functions.source.{RichSourceFunction, SourceFunction}
+import org.apache.flink.streaming.api.functions.source.{RichParallelSourceFunction, RichSourceFunction, SourceFunction}
 import org.apache.flink.streaming.api.scala._
 import org.apache.flink.streaming.api.scala.function.ProcessWindowFunction
 import org.apache.flink.streaming.api.windowing.time.Time
@@ -19,6 +19,9 @@ case class MarketingUserBehavior(userId: String, behavior: String, channel: Stri
 
 // 输出结果样例类
 case class MarketingViewCount(windowStart: String, windowEnd: String, channel: String, behavior: String, count: Long)
+
+
+
 
 /**
  * @author shkstart
@@ -42,14 +45,18 @@ object AppMarketingByChannel {
       .map(data => {
         ((data.channel, data.behavior), 1L)
       })
+      // 以（channel,behavior） 二元组作为分组的key
       .keyBy(_._1)
       .timeWindow(Time.hours(1), Time.seconds(10))
+      // 此处使用全窗口作为演示，实际使用中采用增量聚合效率更高
       .process(new MarketingCountByChannel())
     dataStream.print()
     env.execute("app marketing by channel job")
 
   }
 }
+
+
 
 // 自定义数据源
 class SimulatedEventSource() extends RichSourceFunction[MarketingUserBehavior] {
@@ -76,9 +83,11 @@ class SimulatedEventSource() extends RichSourceFunction[MarketingUserBehavior] {
       val channel = channelSets(rand.nextInt(channelSets.size))
       val ts = System.currentTimeMillis()
 
+      // 使用CTX 发出数据
       ctx.collect(MarketingUserBehavior(id, behavior, channel, ts))
 
       count += 1
+      // 造成数据的间隔
       TimeUnit.MILLISECONDS.sleep(10L)
     }
   }
