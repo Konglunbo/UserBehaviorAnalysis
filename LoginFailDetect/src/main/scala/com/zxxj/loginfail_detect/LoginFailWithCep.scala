@@ -33,9 +33,18 @@ object LoginFailWithCep {
       .keyBy(_.userId)
 
     // 2.定义匹配模式
-    val loginFailPattern: Pattern[LoginEvent, LoginEvent] = Pattern.begin[LoginEvent]("begin").where(_.eventType == "fail")
-      .next("next").where(_.eventType == "fail")
-      .within(Time.seconds(5))
+    val loginFailPattern: Pattern[LoginEvent, LoginEvent]
+    = Pattern.begin[LoginEvent]("begin").where(_.eventType == "fail") // 第一个登陆失败事件
+      .next("next").where(_.eventType == "fail") // 紧跟着第二次登陆失败事件
+      .within(Time.seconds(5)) // 在2s内连续发生有效
+
+
+    // 循环模式定义示例(宽松近邻)
+    val loginFailPattern2: Pattern[LoginEvent, LoginEvent] = Pattern.begin[LoginEvent]("fails").consecutive() // 更改为严格匹配
+      .times(2)
+      .where(_.eventType == "fail")
+      .within(Time.seconds(10))
+    loginFailPattern2
 
 
     //3.在事件流上应用模式，得到一个pattern stream
@@ -60,4 +69,15 @@ class LoginFailMatch() extends PatternSelectFunction[LoginEvent, Warning] {
 
 
   }
+
+  class LoginFailMatch2() extends PatternSelectFunction[LoginEvent, Warning] {
+    override def select(pattern: util.Map[String, util.List[LoginEvent]]): Warning = {
+      // 从map中按照名称取出对应的事件
+      val firstFail: LoginEvent = pattern.get("fails").get(0)
+      val lastFail: LoginEvent = pattern.get("fails").get(1)
+      Warning(firstFail.userId, firstFail.eventTime, lastFail.eventTime, "login fail!")
+
+    }
+  }
+
 }
