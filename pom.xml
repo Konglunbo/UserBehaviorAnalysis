@@ -13,6 +13,7 @@
         <module>NetworkFlowAnalysis</module>
         <module>MarketAnalysis</module>
         <module>LoginFailDetect</module>
+        <module>OrderPayDetect</module>
     </modules>
     <properties>
         <flink.version>1.10.0</flink.version>
@@ -54,6 +55,11 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-table-planner_2.11</artifactId>
             <version>1.10.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-cep-scala_${scala.binary.version}</artifactId>
+            <version>${flink.version}</version>
         </dependency>
     </dependencies>
     <build>

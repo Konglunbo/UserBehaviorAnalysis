@@ -13,7 +13,7 @@ import org.apache.flink.types.Row
 
 //case class UserBehavior(userId: Long, itemId: Long, categoryId: Int, behavior: String, timestamp: Long)
 
-object HotItemsWithTableApi {
+object HotItemsWithTableApi1 {
   def main(args: Array[String]): Unit = {
     //1. 创建执行环境
     val env = StreamExecutionEnvironment.getExecutionEnvironment
